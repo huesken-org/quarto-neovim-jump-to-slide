@@ -99,6 +99,18 @@ the attribute onto the headings.
 The server binds to `127.0.0.1` inside WSL. A browser on Windows reaches it through
 WSL's localhost forwarding, the same way it reaches `quarto preview`.
 
+## Debugging
+
+- `:QuartoJumpStatus` shows whether the server is running and which browser
+  connections (SSE) are open.
+- `:QuartoJumpLog` shows the last 500 server events: start/stop, every request
+  (with Host/Origin), 403s, SSE connects/disconnects, each `goto` sent, each jump
+  and how long Neovim needed to handle it. Set `log_file = vim.fn.stdpath("log")
+  .. "/quarto-jump.log"` to also keep it on disk.
+- In the browser: DevTools console with level "Verbose" shows `[quarto-jump]`
+  messages; `QuartoJump.status()` returns the SSE state, the last event received
+  and the last jump result. A jump with no answer after 5 s shows a toast.
+
 ## Tests
 
 ```sh

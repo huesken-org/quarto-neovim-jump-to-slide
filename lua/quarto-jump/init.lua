@@ -18,6 +18,9 @@ M.config = {
   -- called after a jump, e.g. to raise the terminal window
   on_jump = nil, ---@type (fun(result: table))?
   extensions = { "qmd", "md", "Rmd" },
+  -- also append the debug log (:QuartoJumpLog) to this file, e.g.
+  -- vim.fn.stdpath("log") .. "/quarto-jump.log"
+  log_file = nil, ---@type string?
 }
 
 local ns = vim.api.nvim_create_namespace("quarto-jump")
@@ -108,11 +111,28 @@ function M.stop() server.stop() end
 
 function M.status()
   if server.running() then
-    vim.notify(("quarto-jump: listening on %s:%d, %d browser(s) connected, sync %s, root %s"):format(
-      M.config.host, server.port, server.client_count(), sync.enabled and "on" or "off", M.root()))
+    local peers = server.client_peers()
+    vim.notify(("quarto-jump: listening on %s:%d, %d browser(s) connected%s, sync %s, root %s"):format(
+      M.config.host, server.port, #peers, #peers > 0 and (" [" .. table.concat(peers, ", ") .. "]") or "",
+      sync.enabled and "on" or "off", M.root()))
   else
-    vim.notify("quarto-jump: not running")
+    vim.notify("quarto-jump: not running (see :QuartoJumpLog)")
   end
+end
+
+--- Show the debug log in a scratch buffer.
+function M.show_log()
+  local lines = server.get_log()
+  if #lines == 0 then lines = { "(empty)" } end
+  vim.cmd("botright new")
+  local buf = vim.api.nvim_get_current_buf()
+  vim.bo[buf].buftype = "nofile"
+  vim.bo[buf].bufhidden = "wipe"
+  vim.bo[buf].swapfile = false
+  vim.api.nvim_buf_set_name(buf, "quarto-jump://log")
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.bo[buf].modifiable = false
+  vim.cmd("normal! G")
 end
 
 function M.setup(opts)
@@ -120,12 +140,14 @@ function M.setup(opts)
   search.config.extensions = M.config.extensions
   sync.enabled = M.config.sync
   server.on_jump = M.jump
+  server.log_file = M.config.log_file
 
   vim.api.nvim_create_user_command("QuartoJumpStart", function(a)
     M.start(tonumber(a.args))
   end, { nargs = "?", desc = "Start the quarto-jump server" })
   vim.api.nvim_create_user_command("QuartoJumpStop", M.stop, { desc = "Stop the quarto-jump server" })
   vim.api.nvim_create_user_command("QuartoJumpStatus", M.status, { desc = "quarto-jump status" })
+  vim.api.nvim_create_user_command("QuartoJumpLog", M.show_log, { desc = "Show the quarto-jump debug log" })
   vim.api.nvim_create_user_command("QuartoJumpSync", function(a)
     if a.args == "on" then sync.enabled = true
     elseif a.args == "off" then sync.enabled = false
@@ -156,6 +178,7 @@ function M.setup(opts)
         if tried or server.running() then return true end
         if vim.fs.root(ev.buf, "_quarto.yml") then
           tried = true
+          server.log("autostart triggered by %s (pid %d)", vim.api.nvim_buf_get_name(ev.buf), vim.fn.getpid())
           M.start()
           return true
         end

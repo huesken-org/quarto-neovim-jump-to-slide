@@ -20,6 +20,14 @@
 
   let cfg, base, clickMods;
 
+  // Debug: console.debug (DevTools level "Verbose") + QuartoJump.status().
+  const state = {
+    sse: "init", sseOpenedAt: null, sseErrors: 0, lastEvent: null, lastEventAt: null,
+    jumpsSent: 0, jumpsPending: 0, lastJump: null,
+  };
+  const SSE_STATES = ["connecting", "open", "closed"];
+  const dbg = (...a) => console.debug("[quarto-jump]", new Date().toISOString().slice(11, 23), ...a);
+
   const words = (s) => (s || "").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
   const norm = (s) => words(s).join(" ");
   const isReveal = () => !!(window.Reveal && document.querySelector(".reveal .slides"));
@@ -71,14 +79,36 @@
   // ---------------------------------------------------------- browser -> nvim
   function send(payload) {
     payload.page = location.pathname;
+    const t0 = performance.now();
+    const ctrl = window.AbortController ? new AbortController() : null;
+    const timer = ctrl && setTimeout(() => ctrl.abort(), 5000);
+    state.jumpsSent++;
+    state.jumpsPending++;
+    dbg("jump ->", payload);
     fetch(base + "/jump", {
       method: "POST",
       headers: { "Content-Type": "text/plain" }, // "simple" request, no preflight
       body: JSON.stringify(payload),
+      signal: ctrl ? ctrl.signal : undefined,
     })
       .then((r) => r.json())
-      .then((res) => toast(res.ok ? `→ ${res.file}:${res.lnum}` : `quarto-jump: ${res.error}`))
-      .catch(() => toast(`quarto-jump: Neovim not reachable on port ${cfg.port}`));
+      .then((res) => {
+        state.lastJump = { ok: res.ok, res, ms: Math.round(performance.now() - t0) };
+        dbg("jump <-", state.lastJump);
+        toast(res.ok ? `→ ${res.file}:${res.lnum}` : `quarto-jump: ${res.error}`);
+      })
+      .catch((err) => {
+        const timeout = err && err.name === "AbortError";
+        state.lastJump = { ok: false, error: timeout ? "timeout" : String(err), ms: Math.round(performance.now() - t0) };
+        dbg("jump failed", state.lastJump);
+        toast(timeout
+          ? "quarto-jump: no answer from Neovim within 5 s (busy? too many preview tabs?)"
+          : `quarto-jump: Neovim not reachable on port ${cfg.port}`);
+      })
+      .finally(() => {
+        state.jumpsPending--;
+        clearTimeout(timer);
+      });
   }
 
   // Current slide (reveal) or the section heading nearest above the viewport top.
@@ -191,6 +221,7 @@
 
   function gotoSource(msg) {
     const el = findTarget(msg);
+    dbg("goto", msg, "->", el);
     if (el) return show(el);
     // Website: the file is not on this page -> navigate if a page exists for it.
     if (isReveal() || !msg.html || cfg.source === msg.file) return;
@@ -208,8 +239,18 @@
   let retry = 1000;
   function connect() {
     const es = new EventSource(base + "/events");
-    es.onopen = () => (retry = 1000);
+    state.es = es;
+    state.sse = "connecting";
+    dbg("sse connecting", base + "/events");
+    es.onopen = () => {
+      retry = 1000;
+      state.sse = "open";
+      state.sseOpenedAt = new Date().toISOString();
+      dbg("sse open");
+    };
     es.addEventListener("goto", (ev) => {
+      state.lastEvent = ev.data;
+      state.lastEventAt = new Date().toISOString();
       try {
         gotoSource(JSON.parse(ev.data));
       } catch (err) {
@@ -217,6 +258,9 @@
       }
     });
     es.onerror = () => {
+      state.sseErrors++;
+      state.sse = SSE_STATES[es.readyState];
+      dbg("sse error, readyState", state.sse);
       if (es.readyState === EventSource.CLOSED) {
         setTimeout(connect, retry);
         retry = Math.min(retry * 2, 30000);
@@ -237,7 +281,11 @@
       if (isJumpClick(e)) { e.preventDefault(); e.stopPropagation(); }
     }, true);
     if (window.EventSource) connect();
-    window.QuartoJump = { findTarget, gotoSource, currentAnchor, sourceOf }; // for debugging/tests
+    const status = () => Object.assign({}, state, {
+      sse: state.es ? SSE_STATES[state.es.readyState] : state.sse, es: undefined, cfg, page: location.href,
+    });
+    window.QuartoJump = { findTarget, gotoSource, currentAnchor, sourceOf, status }; // for debugging/tests
+    dbg("init", cfg);
 
     const pending = sessionStorage.getItem(PENDING_KEY);
     if (pending) {
