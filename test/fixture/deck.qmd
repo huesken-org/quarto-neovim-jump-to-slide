@@ -1,0 +1,15 @@
+---
+title: "Fixture deck"
+format: revealjs
+---
+
+## First slide {#first}
+
+A paragraph on the first slide.
+
+{{< include parts/_included.qmd >}}
+
+## Last slide
+
+- item one with **bold** text
+- item two with [a link](https://example.org)

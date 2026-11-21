@@ -1,0 +1,8 @@
+---
+title: "Fixture page"
+format: html
+---
+
+## Section A
+
+Some text in section A.

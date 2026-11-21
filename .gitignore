@@ -1,0 +1,5 @@
+test/node-deps/
+test/fixture/_extensions/
+test/fixture/*.html
+test/fixture/*_files/
+test/fixture/.quarto/
