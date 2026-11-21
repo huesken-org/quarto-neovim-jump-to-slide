@@ -1,7 +1,7 @@
 // quarto-jump: browser side.
 //
 //   Alt+J        jump to the current slide (revealjs) / section (html) in Neovim
-//   Alt+click    jump to the clicked element in Neovim
+//   Ctrl+click   jump to the clicked element in Neovim (Cmd+click on Mac)
 //   (automatic)  follow the Neovim cursor (Server-Sent Events from Neovim)
 //
 // Only active when the page is served from localhost (quarto preview).
@@ -18,7 +18,7 @@
   ].join(",");
   const PENDING_KEY = "quarto-jump-pending";
 
-  let cfg, base;
+  let cfg, base, clickMods;
 
   const words = (s) => (s || "").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
   const norm = (s) => words(s).join(" ");
@@ -107,8 +107,25 @@
     send({ sourceFile: sourceOf(a.el), text: a.text });
   }
 
+  // "ctrl", "alt+shift", … or "auto" = Ctrl, on Mac Cmd (Ctrl+click is the
+  // context menu there). Reveal's zoom plugin zooms on Alt+click (on Linux
+  // Ctrl+click); the mousedown handler below keeps it from seeing our click.
+  function clickModifiers() {
+    let spec = String(cfg.click || "auto").toLowerCase();
+    if (spec === "auto") {
+      const p = navigator.platform || "";
+      spec = /Mac|iPhone|iPad/.test(p) ? "meta" : "ctrl";
+    }
+    const want = new Set(spec.split("+").map((m) => m.trim().replace(/^cmd$/, "meta")));
+    return ["ctrl", "alt", "shift", "meta"].map((m) => [m + "Key", want.has(m)]);
+  }
+
+  function isJumpClick(e) {
+    return clickMods.every(([k, v]) => !!e[k] === v);
+  }
+
   function onClick(e) {
-    if (!e.altKey || e.ctrlKey || e.metaKey) return;
+    if (!isJumpClick(e)) return;
     e.preventDefault();
     e.stopPropagation();
     const el = (e.target.closest && e.target.closest(BLOCK)) || e.target;
@@ -208,10 +225,17 @@
   }
 
   function init() {
-    cfg = Object.assign({ port: 7878, key: "j", source: null }, window.QUARTO_JUMP || {});
+    cfg = Object.assign({ port: 7878, key: "j", click: "auto", source: null }, window.QUARTO_JUMP || {});
+    clickMods = clickModifiers();
     base = `http://127.0.0.1:${cfg.port}`;
     document.addEventListener("keydown", onKey, true);
     document.addEventListener("click", onClick, true);
+    // Swallow the mousedown too, so nothing else (Reveal's zoom, chalkboard,
+    // text selection) reacts to the jump click. Capture phase on document runs
+    // before Reveal's listener on .reveal.
+    document.addEventListener("mousedown", (e) => {
+      if (isJumpClick(e)) { e.preventDefault(); e.stopPropagation(); }
+    }, true);
     if (window.EventSource) connect();
     window.QuartoJump = { findTarget, gotoSource, currentAnchor, sourceOf }; // for debugging/tests
 

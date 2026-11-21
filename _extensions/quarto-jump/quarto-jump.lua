@@ -9,6 +9,9 @@
 --   quarto-jump:
 --     port: 7878
 --     key: j                      # Alt+<key> jumps to the current slide/section
+--     click: auto                 # modifier(s) for the jump click: auto, ctrl,
+--                                 # alt, meta, shift or e.g. ctrl+shift; auto =
+--                                 # Ctrl (Cmd on Mac)
 
 local function relative(path)
   local dir = quarto.project and quarto.project.directory
@@ -26,10 +29,11 @@ function Meta(meta)
 
   local opts = meta["quarto-jump"]
   if opts == false then return nil end
-  local cfg = { port = 7878, key = "j" }
+  local cfg = { port = 7878, key = "j", click = "auto" }
   if type(opts) == "table" then
     if opts.port then cfg.port = tonumber(pandoc.utils.stringify(opts.port)) or cfg.port end
     if opts.key then cfg.key = pandoc.utils.stringify(opts.key) end
+    if opts.click then cfg.click = pandoc.utils.stringify(opts.click) end
   end
   if quarto.doc.input_file then
     cfg.source = relative(quarto.doc.input_file)

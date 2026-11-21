@@ -6,7 +6,7 @@ to the corresponding source in Neovim, and let the browser follow the Neovim cur
 | In the browser | Effect |
 |---|---|
 | `Alt+J` | Neovim jumps to the current slide / the section at the top of the viewport |
-| `Alt+click` | Neovim jumps to the clicked paragraph, list item, code line, … |
+| `Ctrl+click` | Neovim jumps to the clicked paragraph, list item, code line, … (Cmd+click on Mac) |
 | *(move cursor in Neovim)* | browser goes to the matching slide / scrolls to the element |
 
 You start `quarto preview` yourself, as usual.
@@ -81,7 +81,12 @@ leave in for published builds. Disable it with `quarto-jump: false`; options:
 quarto-jump:
   port: 7878
   key: j        # Alt+J
+  click: auto   # jump click: auto | ctrl | alt | meta | shift | e.g. ctrl+shift
 ```
+
+`auto` is Ctrl+click, on Mac Cmd+click (Ctrl+click opens the context menu there).
+Alt+click stays Reveal's zoom. On Linux, Reveal zooms on Ctrl+click instead; there
+the jump click takes precedence on preview pages.
 
 `data-source-file` attributes are optional. They make the search more precise when
 one rendered document is assembled from many files. Put them on headings or on any

@@ -51,17 +51,27 @@ check("sync: code line", t && t.matches("pre code > span"), t && t.outerHTML);
 t = w.QuartoJump.findTarget({ file: "slides/does/not/exist.qmd", heading: "", index: 0, text: "" });
 check("sync: unknown file -> nothing", t === null, t && t.outerHTML);
 
-// Alt+click on the paragraph
+// Alt+click is Reveal's zoom -> ignored; Ctrl+click jumps (platform "" -> ctrl)
 const p = [...w.document.querySelectorAll("p")].find((e) => e.textContent.startsWith("Nur Methodensignaturen"));
 p.dispatchEvent(new w.MouseEvent("click", { bubbles: true, altKey: true }));
+check("alt+click ignored (reveal zoom)", w.sent.length === 0, w.sent);
+p.dispatchEvent(new w.MouseEvent("click", { bubbles: true, ctrlKey: true }));
 const b = w.sent[0] && w.sent[0].body;
-check("alt+click payload", b && b.sourceFile === define && b.text.startsWith("Nur Methodensignaturen"), b);
+check("ctrl+click payload", b && b.sourceFile === define && b.text.startsWith("Nur Methodensignaturen"), b);
 
-// Alt+click on a code token -> whole code line
+// The jump click's mousedown must not reach Reveal's zoom listener on .reveal
+let zoomed = false;
+w.document.querySelector(".reveal").addEventListener("mousedown", () => (zoomed = true));
+p.dispatchEvent(new w.MouseEvent("mousedown", { bubbles: true, ctrlKey: true }));
+check("ctrl+mousedown hidden from reveal zoom", !zoomed);
+p.dispatchEvent(new w.MouseEvent("mousedown", { bubbles: true, altKey: true }));
+check("alt+mousedown still reaches reveal zoom", zoomed);
+
+// Ctrl+click on a code token -> whole code line
 const tok = w.document.querySelector("section#interface-definieren pre code > span span");
-tok.dispatchEvent(new w.MouseEvent("click", { bubbles: true, altKey: true }));
+tok.dispatchEvent(new w.MouseEvent("click", { bubbles: true, ctrlKey: true }));
 const b2 = w.sent[1] && w.sent[1].body;
-check("alt+click code token -> line", b2 && /^type Writer interface/.test(b2.text), b2);
+check("ctrl+click code token -> line", b2 && /^type Writer interface/.test(b2.text), b2);
 
 // --- generic fixture: include, no data-source-file --------------------------------
 const f = path.join(__dirname, "fixture/deck.html");
